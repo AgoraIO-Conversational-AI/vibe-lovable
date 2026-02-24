@@ -1,4 +1,4 @@
-import { AccessToken, ServiceRtc, ServiceRtm } from "npm:agora-token@latest";
+import { RtcTokenBuilder, RtmTokenBuilder, RtcRole, RtmRole } from "npm:agora-access-token@2.0.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,24 +20,24 @@ function generateChannel(): string {
 
 function buildToken(
   channelName: string,
-  uid: string,
+  uid: number,
   appId: string,
   appCertificate: string
 ): string {
-  const token = new AccessToken(appId, appCertificate, 0, 86400);
+  const expirationTimeInSeconds = 86400;
+  const currentTimestamp = Math.floor(Date.now() / 1000);
+  const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
 
-  const rtcService = new ServiceRtc(channelName, uid);
-  rtcService.addPrivilege(ServiceRtc.kPrivilegeJoinChannel, 86400);
-  rtcService.addPrivilege(ServiceRtc.kPrivilegePublishAudioStream, 86400);
-  rtcService.addPrivilege(ServiceRtc.kPrivilegePublishVideoStream, 86400);
-  rtcService.addPrivilege(ServiceRtc.kPrivilegePublishDataStream, 86400);
-  token.addService(rtcService);
+  const rtcToken = RtcTokenBuilder.buildTokenWithUid(
+    appId,
+    appCertificate,
+    channelName,
+    uid,
+    RtcRole.PUBLISHER,
+    privilegeExpiredTs
+  );
 
-  const rtmService = new ServiceRtm(String(uid));
-  rtmService.addPrivilege(ServiceRtm.kPrivilegeLogin, 86400);
-  token.addService(rtmService);
-
-  return token.build();
+  return rtcToken;
 }
 
 function buildTtsConfig(vendor: string, key: string, voiceId: string) {
@@ -134,8 +134,8 @@ Deno.serve(async (req) => {
     let agentToken: string;
 
     if (AGORA_APP_CERTIFICATE) {
-      userToken = buildToken(channel, USER_UID, AGORA_APP_ID, AGORA_APP_CERTIFICATE);
-      agentToken = buildToken(channel, AGENT_UID, AGORA_APP_ID, AGORA_APP_CERTIFICATE);
+      userToken = buildToken(channel, Number(USER_UID), AGORA_APP_ID, AGORA_APP_CERTIFICATE);
+      agentToken = buildToken(channel, Number(AGENT_UID), AGORA_APP_ID, AGORA_APP_CERTIFICATE);
     } else {
       userToken = AGORA_APP_ID;
       agentToken = AGORA_APP_ID;
