@@ -187,13 +187,7 @@ Deno.serve(async (req) => {
     // Call Agora ConvoAI API
     const agoraUrl = `https://api.agora.io/api/conversational-ai-agent/v2/projects/${AGORA_APP_ID}/join`;
     
-    console.log("=== AGORA REQUEST DEBUG ===");
-    console.log("URL:", agoraUrl);
-    console.log("AGORA_APP_ID:", AGORA_APP_ID);
-    console.log("Auth header present:", !!AGORA_AUTH_HEADER);
-    console.log("Auth header starts with:", AGORA_AUTH_HEADER.substring(0, 10) + "...");
-    console.log("PAYLOAD:", JSON.stringify(payload, null, 2));
-    
+    // Call Agora ConvoAI API
     const agoraRes = await fetch(agoraUrl, {
       method: "POST",
       headers: {
@@ -204,9 +198,6 @@ Deno.serve(async (req) => {
     });
 
     const responseBody = await agoraRes.text();
-    console.log("=== AGORA RESPONSE ===");
-    console.log("Status:", agoraRes.status);
-    console.log("Body:", responseBody);
 
     if (!agoraRes.ok) {
       return new Response(responseBody, {
