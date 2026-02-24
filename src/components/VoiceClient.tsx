@@ -123,7 +123,7 @@ export function VoiceClient() {
       await joinChannel({
         appId: data.appId,
         channel: data.channel,
-        token: data.token,
+        token: data.token || null,
         uid: Number(data.uid),
         agentUid: data.agentUid,
         agentRtmUid: data.agentRtmUid,

@@ -137,8 +137,9 @@ Deno.serve(async (req) => {
       userToken = buildToken(channel, Number(USER_UID), AGORA_APP_ID, AGORA_APP_CERTIFICATE);
       agentToken = buildToken(channel, Number(AGENT_UID), AGORA_APP_ID, AGORA_APP_CERTIFICATE);
     } else {
-      userToken = AGORA_APP_ID;
-      agentToken = AGORA_APP_ID;
+      // No certificate: use null tokens (App ID-only auth)
+      userToken = "";
+      agentToken = "";
     }
 
     const agentRtmUid = `${AGENT_UID}-${channel}`;
@@ -220,7 +221,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         appId: AGORA_APP_ID,
         channel,
-        token: userToken,
+        token: userToken || null,
         uid: USER_UID,
         agentUid: AGENT_UID,
         agentRtmUid: agentRtmUid,
