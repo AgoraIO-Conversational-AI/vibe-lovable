@@ -1,1 +1,13 @@
 project_id = "honlibomaceroerwysub"
+
+[functions.start-agent]
+verify_jwt = false
+
+[functions.hangup-agent]
+verify_jwt = false
+
+[functions.check-env]
+verify_jwt = false
+
+[functions.health]
+verify_jwt = false
