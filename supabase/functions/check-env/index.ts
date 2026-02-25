@@ -13,12 +13,16 @@ Deno.serve(async (req) => {
     "APP_ID",
     "AGENT_AUTH_HEADER",
     "LLM_API_KEY",
-    "TTS_VENDOR",
     "TTS_KEY",
-    "TTS_VOICE_ID",
   ];
 
-  const optionalVars: string[] = ["APP_CERTIFICATE"];
+  const optionalVars: string[] = [
+    "APP_CERTIFICATE",
+    "TTS_VENDOR",
+    "TTS_VOICE_ID",
+    "LLM_URL",
+    "LLM_MODEL",
+  ];
 
   const configured: Record<string, boolean> = {};
   const missing: string[] = [];

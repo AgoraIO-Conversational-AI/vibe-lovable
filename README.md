@@ -95,7 +95,7 @@ supabase secrets set \
 
 ### Edge Function: `check-env`
 
-Validates all 6 required env vars are set via `Deno.env.get()`. `APP_CERTIFICATE` is optional (reported but not required). Returns JSON:
+Validates the 4 required env vars (`APP_ID`, `AGENT_AUTH_HEADER`, `LLM_API_KEY`, `TTS_KEY`) are set via `Deno.env.get()`. Optional vars (`APP_CERTIFICATE`, `TTS_VENDOR`, `TTS_VOICE_ID`, `LLM_URL`, `LLM_MODEL`) are reported but not required — the app has sensible defaults. Returns JSON:
 
 ```json
 { "configured": { "APP_ID": true, ... }, "ready": true, "missing": [] }
