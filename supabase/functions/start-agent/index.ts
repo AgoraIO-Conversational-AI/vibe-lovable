@@ -1,4 +1,116 @@
-import { AccessToken, ServiceRtc, ServiceRtm } from "npm:agora-token";
+// --- Agora token generation (v007) - no npm dependency needed ---
+
+function packUint16(v: number): Uint8Array {
+  const buf = new Uint8Array(2);
+  new DataView(buf.buffer).setUint16(0, v, true);
+  return buf;
+}
+
+function packUint32(v: number): Uint8Array {
+  const buf = new Uint8Array(4);
+  new DataView(buf.buffer).setUint32(0, v, true);
+  return buf;
+}
+
+function packString(s: string): Uint8Array {
+  const encoded = new TextEncoder().encode(s);
+  return concat(packUint16(encoded.length), encoded);
+}
+
+function packMapUint32(map: Record<number, number>): Uint8Array {
+  const keys = Object.keys(map).map(Number).sort((a, b) => a - b);
+  const parts: Uint8Array[] = [packUint16(keys.length)];
+  for (const k of keys) {
+    parts.push(packUint16(k), packUint32(map[k]));
+  }
+  return concat(...parts);
+}
+
+function concat(...arrays: Uint8Array[]): Uint8Array {
+  const total = arrays.reduce((sum, a) => sum + a.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const a of arrays) {
+    result.set(a, offset);
+    offset += a.length;
+  }
+  return result;
+}
+
+async function hmacSha256(key: Uint8Array | string, message: Uint8Array): Promise<Uint8Array> {
+  const keyData = typeof key === "string" ? new TextEncoder().encode(key) : key;
+  const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", cryptoKey, message);
+  return new Uint8Array(sig);
+}
+
+async function deflateAsync(data: Uint8Array): Promise<Uint8Array> {
+  const ds = new CompressionStream("deflate");
+  const writer = ds.writable.getWriter();
+  const reader = ds.readable.getReader();
+  writer.write(data);
+  writer.close();
+  const chunks: Uint8Array[] = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  return concat(...chunks);
+}
+
+function toBase64(data: Uint8Array): string {
+  let binary = "";
+  for (const byte of data) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+async function buildToken(
+  channelName: string,
+  uid: string,
+  appId: string,
+  appCertificate: string
+): Promise<string> {
+  const issueTs = Math.floor(Date.now() / 1000);
+  const expire = 86400;
+  const salt = Math.floor(Math.random() * 99999999) + 1;
+
+  // Signing key: HMAC chain
+  let signing = await hmacSha256(packUint32(issueTs), new TextEncoder().encode(appCertificate));
+  signing = await hmacSha256(packUint32(salt), signing);
+
+  // Pack RTC service (type=1): type + privileges + channelName + uid
+  const rtcPrivileges: Record<number, number> = {
+    1: expire, // joinChannel
+    2: expire, // publishAudioStream
+  };
+  const rtcPacked = concat(packUint16(1), packMapUint32(rtcPrivileges), packString(channelName), packString(uid));
+
+  // Pack RTM service (type=2): type + privileges + userId
+  const rtmPrivileges: Record<number, number> = { 1: expire }; // login
+  const rtmPacked = concat(packUint16(2), packMapUint32(rtmPrivileges), packString(uid));
+
+  // Signing info
+  const signingInfo = concat(
+    packString(appId),
+    packUint32(issueTs),
+    packUint32(expire),
+    packUint32(salt),
+    packUint16(2), // service count
+    rtcPacked,
+    rtmPacked
+  );
+
+  // Signature
+  const signature = await hmacSha256(signing, signingInfo);
+
+  // Final token: pack signature as length-prefixed bytes + signing info, then deflate
+  const content = concat(packUint16(signature.length), signature, signingInfo);
+  const compressed = await deflateAsync(content);
+  return "007" + toBase64(compressed);
+}
+
+// --- Edge function ---
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,27 +128,6 @@ function generateChannel(): string {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
-}
-
-function buildToken(
-  channelName: string,
-  uid: string,
-  appId: string,
-  appCertificate: string
-): string {
-  const expirationTimeInSeconds = 86400;
-  const token = new AccessToken(appId, appCertificate, expirationTimeInSeconds);
-
-  const rtcService = new ServiceRtc(channelName, uid);
-  rtcService.addPrivilege(ServiceRtc.kPrivilegeJoinChannel, expirationTimeInSeconds);
-  rtcService.addPrivilege(ServiceRtc.kPrivilegePublishAudioStream, expirationTimeInSeconds);
-  token.addService(rtcService);
-
-  const rtmService = new ServiceRtm(uid);
-  rtmService.addPrivilege(ServiceRtm.kPrivilegeLogin, expirationTimeInSeconds);
-  token.addService(rtmService);
-
-  return token.build();
 }
 
 function buildTtsConfig(vendor: string, key: string, voiceId: string) {
@@ -129,16 +220,12 @@ Deno.serve(async (req) => {
     const channel = generateChannel();
 
     // Token generation
-    let userToken: string;
-    let agentToken: string;
+    let userToken = "";
+    let agentToken = "";
 
     if (APP_CERTIFICATE) {
-      userToken = buildToken(channel, USER_UID, APP_ID, APP_CERTIFICATE);
-      agentToken = buildToken(channel, AGENT_UID, APP_ID, APP_CERTIFICATE);
-    } else {
-      // No certificate: use null tokens (App ID-only auth)
-      userToken = "";
-      agentToken = "";
+      userToken = await buildToken(channel, USER_UID, APP_ID, APP_CERTIFICATE);
+      agentToken = await buildToken(channel, AGENT_UID, APP_ID, APP_CERTIFICATE);
     }
 
     const agentRtmUid = `${AGENT_UID}-${channel}`;
@@ -184,17 +271,17 @@ Deno.serve(async (req) => {
     };
 
     // Call Agora ConvoAI API
-    const agoraUrl = `https://api.agora.io/api/conversational-ai-agent/v2/projects/${APP_ID}/join`;
-    
-    // Call Agora ConvoAI API
-    const agoraRes = await fetch(agoraUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: AGENT_AUTH_HEADER,
-      },
-      body: JSON.stringify(payload),
-    });
+    const agoraRes = await fetch(
+      `https://api.agora.io/api/conversational-ai-agent/v2/projects/${APP_ID}/join`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: AGENT_AUTH_HEADER,
+        },
+        body: JSON.stringify(payload),
+      }
+    );
 
     const responseBody = await agoraRes.text();
 

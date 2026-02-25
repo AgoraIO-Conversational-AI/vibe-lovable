@@ -96,28 +96,7 @@ Validates all 6 required env vars are set via `Deno.env.get()`. `APP_CERTIFICATE
 
 Accepts optional POST body `{ prompt, greeting }`. Defaults: prompt = "You are a friendly voice assistant. Keep responses concise, around 10 to 20 words." greeting = "Hi there! How can I help you today?"
 
-**Token generation** — combined RTC+RTM token using `npm:agora-token`:
-
-```typescript
-import { AccessToken, ServiceRtc, ServiceRtm } from "npm:agora-token";
-
-function buildToken(
-  channelName: string,
-  uid: string,
-  appId: string,
-  appCertificate: string,
-): string {
-  const token = new AccessToken(appId, appCertificate, 86400);
-  const rtcService = new ServiceRtc(channelName, uid);
-  rtcService.addPrivilege(ServiceRtc.kPrivilegeJoinChannel, 86400);
-  rtcService.addPrivilege(ServiceRtc.kPrivilegePublishAudioStream, 86400);
-  token.addService(rtcService);
-  const rtmService = new ServiceRtm(uid);
-  rtmService.addPrivilege(ServiceRtm.kPrivilegeLogin, 86400);
-  token.addService(rtmService);
-  return token.build();
-}
-```
+**Token generation** — inline v007 token builder using Web Crypto + CompressionStream (no npm dependency). Generates combined RTC+RTM tokens when `APP_CERTIFICATE` is set, otherwise sends empty tokens (App ID-only auth). The algorithm: HMAC-SHA256 signing key chain (issueTs → appCertificate → salt), pack services as little-endian binary (RTC type=1 with joinChannel+publishAudio privileges, RTM type=2 with login privilege), HMAC-sign the packed info, deflate, base64, prefix with "007".
 
 UIDs are strings: agent = `"100"`, user = `"101"`. Channel is random 10-char alphanumeric. Agent RTM UID = `"100-{channel}"`.
 
