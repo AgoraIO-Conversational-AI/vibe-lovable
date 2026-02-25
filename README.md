@@ -26,16 +26,7 @@ npm install
 
 ### 2. Set Supabase secrets
 
-```bash
-supabase secrets set \
-  APP_ID=<your-app-id> \
-  AGENT_AUTH_HEADER="Basic <base64(customerKey:customerSecret)>" \
-  LLM_API_KEY=<your-openai-key> \
-  TTS_VENDOR=rime \
-  TTS_KEY=<your-tts-key> \
-  TTS_VOICE_ID=astra
-# Optional: APP_CERTIFICATE=<your-app-certificate>  (enables token auth)
-```
+See [Environment Variables](#environment-variables) below for the full list.
 
 ### 3. Deploy edge functions
 
@@ -70,17 +61,35 @@ Supabase Edge Functions (Deno)
 
 ## Environment Variables
 
-| Variable            | Required | Description                                                                          |
-| ------------------- | -------- | ------------------------------------------------------------------------------------ |
-| `APP_ID`            | Yes      | 32-char hex App ID from [Agora Console](https://console.agora.io)                    |
-| `APP_CERTIFICATE`   | No       | App Certificate — enables token auth for RTC + RTM (omit for testing without tokens) |
-| `AGENT_AUTH_HEADER` | Yes      | `Basic <base64(customerKey:customerSecret)>` for the REST API                        |
-| `LLM_API_KEY`       | Yes      | OpenAI API key (or compatible provider)                                              |
-| `TTS_VENDOR`        | Yes      | `rime`, `openai`, `elevenlabs`, or `cartesia`                                        |
-| `TTS_KEY`           | Yes      | API key for your TTS vendor                                                          |
-| `TTS_VOICE_ID`      | Yes      | Voice ID (e.g. `astra` for Rime, `alloy` for OpenAI)                                 |
-| `LLM_URL`           | No       | Custom LLM endpoint (defaults to OpenAI)                                             |
-| `LLM_MODEL`         | No       | Model name (defaults to `gpt-4o-mini`)                                               |
+**IMPORTANT: All variables are server-side Supabase secrets only. They are read via `Deno.env.get()` in edge functions — never exposed to the browser. The app uses exactly these variable names.**
+
+There are exactly 6 required and 3 optional variables. Do not invent additional variables.
+
+```bash
+supabase secrets set \
+  APP_ID=your_32_char_hex_app_id \
+  AGENT_AUTH_HEADER="Basic <base64(customerKey:customerSecret)>" \
+  LLM_API_KEY=sk-your-openai-key \
+  TTS_VENDOR=rime \
+  TTS_KEY=your-tts-api-key \
+  TTS_VOICE_ID=astra
+# Optional:
+# supabase secrets set APP_CERTIFICATE=your_32_char_hex_certificate
+# supabase secrets set LLM_URL=https://api.openai.com/v1/chat/completions
+# supabase secrets set LLM_MODEL=gpt-4o-mini
+```
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `APP_ID` | Yes | 32-char hex App ID from [Agora Console](https://console.agora.io) |
+| `AGENT_AUTH_HEADER` | Yes | `Basic <base64(customerKey:customerSecret)>` — Agora REST API auth |
+| `LLM_API_KEY` | Yes | OpenAI API key (or compatible provider) |
+| `TTS_VENDOR` | Yes | One of: `rime`, `openai`, `elevenlabs`, `cartesia` |
+| `TTS_KEY` | Yes | API key for your chosen TTS vendor |
+| `TTS_VOICE_ID` | Yes | Voice ID (e.g. `astra` for Rime, `alloy` for OpenAI, voice ID for ElevenLabs) |
+| `APP_CERTIFICATE` | No | App Certificate — enables token auth for RTC + RTM. Omit for testing without tokens |
+| `LLM_URL` | No | Custom LLM endpoint (defaults to `https://api.openai.com/v1/chat/completions`) |
+| `LLM_MODEL` | No | Model name (defaults to `gpt-4o-mini`) |
 
 ## Implementation Details
 
