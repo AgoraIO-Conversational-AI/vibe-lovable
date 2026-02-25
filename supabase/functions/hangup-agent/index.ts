@@ -10,8 +10,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const AGORA_APP_ID = Deno.env.get("AGORA_APP_ID") || "";
-    const AGORA_AUTH_HEADER = Deno.env.get("AGORA_AUTH_HEADER") || "";
+    const APP_ID = Deno.env.get("APP_ID") || "";
+    const AGENT_AUTH_HEADER = Deno.env.get("AGENT_AUTH_HEADER") || "";
 
     const { agentId } = await req.json();
 
@@ -22,12 +22,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    const url = `https://api.agora.io/api/conversational-ai-agent/v2/projects/${AGORA_APP_ID}/agents/${agentId}/leave`;
+    const url = `https://api.agora.io/api/conversational-ai-agent/v2/projects/${APP_ID}/agents/${agentId}/leave`;
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: AGORA_AUTH_HEADER,
+        Authorization: AGENT_AUTH_HEADER,
       },
     });
 

@@ -6,6 +6,7 @@ import type {
   IRemoteAudioTrack,
   IAgoraRTCRemoteUser,
 } from "agora-rtc-sdk-ng";
+import type RTM from "agora-rtm";
 
 export interface VoiceClientConfig {
   appId: string;
@@ -40,6 +41,9 @@ export function useAgoraVoiceClient() {
 
   const volumeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const agoraRTCRef = useRef<typeof AgoraRTC | null>(null);
+  const rtmClientRef = useRef<InstanceType<typeof RTM.RTM> | null>(null);
+  const transcriptCallbackRef = useRef<((msg: Record<string, unknown>) => void) | null>(null);
+  const channelRef = useRef<string>("");
 
   // Monitor remote audio volume
   useEffect(() => {
@@ -124,6 +128,18 @@ export function useAgoraVoiceClient() {
           setIsAgentSpeaking(false);
         });
 
+        rtcClient.on("stream-message", (_uid: number, data: Uint8Array) => {
+          try {
+            const text = new TextDecoder().decode(data);
+            const msg = JSON.parse(text);
+            if (msg.object && msg.text !== undefined) {
+              transcriptCallbackRef.current?.(msg);
+            }
+          } catch {
+            /* ignore non-JSON data messages */
+          }
+        });
+
         await rtcClient.join(
           config.appId,
           config.channel,
@@ -140,6 +156,19 @@ export function useAgoraVoiceClient() {
 
         await rtcClient.publish(audioTrack);
 
+        // Connect RTM for text messaging
+        channelRef.current = config.channel;
+        try {
+          const AgoraRTM = await import("agora-rtm");
+          const rtm = new AgoraRTM.default.RTM(config.appId, String(config.uid), {
+            token: config.token ?? undefined,
+          });
+          await rtm.login();
+          rtmClientRef.current = rtm;
+        } catch (err) {
+          console.warn("RTM connection failed (text messaging unavailable):", err);
+        }
+
         setClient(rtcClient);
         setLocalAudioTrack(audioTrack);
         setIsConnected(true);
@@ -155,6 +184,14 @@ export function useAgoraVoiceClient() {
 
   const leaveChannel = useCallback(async () => {
     try {
+      if (rtmClientRef.current) {
+        try {
+          await rtmClientRef.current.logout();
+        } catch {
+          /* ignore RTM logout errors */
+        }
+        rtmClientRef.current = null;
+      }
       if (localAudioTrack) {
         localAudioTrack.close();
       }
@@ -162,6 +199,7 @@ export function useAgoraVoiceClient() {
         await client.leave();
       }
 
+      channelRef.current = "";
       setClient(null);
       setLocalAudioTrack(null);
       setRemoteAudioTrack(null);
@@ -174,6 +212,30 @@ export function useAgoraVoiceClient() {
       console.error("Error leaving channel:", error);
     }
   }, [client, localAudioTrack]);
+
+  const setTranscriptCallback = useCallback(
+    (cb: ((msg: Record<string, unknown>) => void) | null) => {
+      transcriptCallbackRef.current = cb;
+    },
+    []
+  );
+
+  const sendTextMessage = useCallback(
+    async (text: string) => {
+      const rtm = rtmClientRef.current;
+      const channel = channelRef.current;
+      if (!rtm || !channel) {
+        console.warn("RTM not connected, cannot send text message");
+        return;
+      }
+      try {
+        await rtm.publish(channel, text);
+      } catch (err) {
+        console.error("Failed to send RTM message:", err);
+      }
+    },
+    []
+  );
 
   const toggleMute = useCallback(async () => {
     if (!localAudioTrack) return;
@@ -198,5 +260,7 @@ export function useAgoraVoiceClient() {
     leaveChannel,
     toggleMute,
     setMessages,
+    setTranscriptCallback,
+    sendTextMessage,
   };
 }

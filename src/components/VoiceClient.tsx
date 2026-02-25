@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Mic, MicOff, Phone, PhoneOff, Settings, Send, AlertTriangle } from "lucide-react";
 import { useAgoraVoiceClient } from "@/hooks/useAgoraVoiceClient";
 import { useAudioVisualization } from "@/hooks/useAudioVisualization";
@@ -40,6 +40,8 @@ export function VoiceClient() {
     leaveChannel,
     toggleMute,
     setMessages,
+    setTranscriptCallback,
+    sendTextMessage,
   } = useAgoraVoiceClient();
 
   const frequencyData = useAudioVisualization(
@@ -84,6 +86,41 @@ export function VoiceClient() {
     conversationEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Transcript handler — groups messages by turn_id, updates on partial, finalizes on final
+  const handleTranscript = useCallback(
+    (msg: Record<string, unknown>) => {
+      const objectType = msg.object as string;
+      const text = msg.text as string;
+      const turnId = msg.turn_id as number;
+      const isFinal = objectType === "assistant.transcription"
+        ? (msg.turn_status as number) === 1
+        : (msg.final as boolean);
+
+      const role: "user" | "assistant" = objectType.startsWith("user")
+        ? "user"
+        : "assistant";
+      const msgId = `${role}-${turnId}`;
+
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === msgId);
+        const updated = {
+          id: msgId,
+          role,
+          text,
+          timestamp: Date.now(),
+          isFinal: !!isFinal,
+        };
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = updated;
+          return next;
+        }
+        return [...prev, updated];
+      });
+    },
+    [setMessages]
+  );
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -107,18 +144,8 @@ export function VoiceClient() {
       setAgentId(data.agentId);
       setChannelName(data.channel);
 
-      // Add greeting message
-      if (greeting.trim() || !prompt.trim()) {
-        setMessages([
-          {
-            id: "greeting",
-            role: "assistant",
-            text: greeting.trim() || "Hi there! How can I help you today?",
-            timestamp: Date.now(),
-            isFinal: true,
-          },
-        ]);
-      }
+      // Register transcript callback before joining so we catch the greeting
+      setTranscriptCallback(handleTranscript);
 
       await joinChannel({
         appId: data.appId,
@@ -139,6 +166,7 @@ export function VoiceClient() {
   };
 
   const handleDisconnect = async () => {
+    setTranscriptCallback(null);
     await leaveChannel();
     if (agentId) {
       try {
@@ -152,19 +180,21 @@ export function VoiceClient() {
     }
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!chatMessage.trim() || !isConnected) return;
+    const text = chatMessage.trim();
+    setChatMessage("");
     setMessages((prev) => [
       ...prev,
       {
-        id: Date.now().toString(),
+        id: `user-text-${Date.now()}`,
         role: "user",
-        text: chatMessage.trim(),
+        text,
         timestamp: Date.now(),
         isFinal: true,
       },
     ]);
-    setChatMessage("");
+    await sendTextMessage(text);
   };
 
   // Loading state

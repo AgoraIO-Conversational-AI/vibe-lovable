@@ -1,73 +1,99 @@
-# Welcome to your Lovable project
+# <img src="https://www.agora.io/en/wp-content/uploads/2024/01/Agora-logo-horizantal.svg" alt="Agora" width="120" style="vertical-align: middle;" /> Simple Connect — Voice AI Agent
 
-## Project info
+A minimal React + Supabase app that connects to an Agora Conversational AI agent
+with real-time voice and text chat. Click **Connect**, talk, and see live
+transcripts appear in the chat panel.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Features
 
-## How can I edit this code?
+- **Real-time Voice** — Full-duplex audio via Agora RTC with echo cancellation,
+  noise suppression, and auto gain control
+- **Live Transcripts** — User and agent speech appears in the chat window as it
+  happens (via RTC stream-message)
+- **Text Chat** — Type a message and send it to the agent via Agora RTM
+- **Agent Visualizer** — Pulsing orb shows when the agent is speaking
+- **Customizable** — Set a custom system prompt and greeting before connecting
+- **Serverless Backend** — Three Supabase Edge Functions handle token generation,
+  agent start, and hangup
 
-There are several ways of editing your application.
+## Quick Start
 
-**Use Lovable**
+### 1. Install dependencies
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+```bash
+npm install
+```
 
-Changes made via Lovable will be committed automatically to this repo.
+### 2. Set Supabase secrets
 
-**Use your preferred IDE**
+```bash
+supabase secrets set \
+  APP_ID=<your-app-id> \
+  APP_CERTIFICATE=<your-app-certificate> \
+  AGENT_AUTH_HEADER="Basic <base64(customerKey:customerSecret)>" \
+  LLM_API_KEY=<your-openai-key> \
+  TTS_VENDOR=rime \
+  TTS_KEY=<your-tts-key> \
+  TTS_VOICE_ID=astra
+```
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### 3. Deploy edge functions
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+```bash
+supabase functions deploy check-env
+supabase functions deploy start-agent
+supabase functions deploy hangup-agent
+```
 
-Follow these steps:
+### 4. Run the app
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Open the app, click **Connect**, and start talking.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Architecture
 
-**Use GitHub Codespaces**
+```
+Browser (React + Vite)
+  │
+  ├─ RTC audio ←→ Agora Conversational AI Agent
+  ├─ RTC stream-message ← agent transcripts
+  └─ RTM publish → text messages to agent
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Supabase Edge Functions (Deno)
+  ├─ check-env      — validates required secrets
+  ├─ start-agent    — generates RTC+RTM tokens, calls Agora ConvoAI API
+  └─ hangup-agent   — stops the agent
+```
 
-## What technologies are used for this project?
+## Environment Variables
 
-This project is built with:
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `APP_ID` | Yes | 32-char hex App ID from [Agora Console](https://console.agora.io) |
+| `APP_CERTIFICATE` | Yes | App Certificate (enables token auth for RTC + RTM) |
+| `AGENT_AUTH_HEADER` | Yes | `Basic <base64(customerKey:customerSecret)>` for the REST API |
+| `LLM_API_KEY` | Yes | OpenAI API key (or compatible provider) |
+| `TTS_VENDOR` | Yes | `rime`, `openai`, `elevenlabs`, or `cartesia` |
+| `TTS_KEY` | Yes | API key for your TTS vendor |
+| `TTS_VOICE_ID` | Yes | Voice ID (e.g. `astra` for Rime, `alloy` for OpenAI) |
+| `LLM_URL` | No | Custom LLM endpoint (defaults to OpenAI) |
+| `LLM_MODEL` | No | Model name (defaults to `gpt-4o-mini`) |
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Tech Stack
 
-## How can I deploy this project?
+- **Frontend:** React 18, Vite, TypeScript, Tailwind CSS, shadcn/ui
+- **Backend:** Supabase Edge Functions (Deno)
+- **Real-time:** agora-rtc-sdk-ng (voice), agora-rtm (text messaging)
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Reference
 
-## Can I connect a custom domain to my Lovable project?
+- [Agora Conversational AI Docs](https://docs.agora.io/en/conversational-ai/overview/product-overview)
+- [Agora Console](https://console.agora.io)
+- [Agent Samples](https://github.com/AgoraIO-Conversational-AI/agent-samples)
 
-Yes, you can!
+## License
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+MIT

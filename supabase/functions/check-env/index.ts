@@ -10,15 +10,16 @@ Deno.serve(async (req) => {
   }
 
   const requiredVars = [
-    "AGORA_APP_ID",
-    "AGORA_AUTH_HEADER",
+    "APP_ID",
+    "APP_CERTIFICATE",
+    "AGENT_AUTH_HEADER",
     "LLM_API_KEY",
     "TTS_VENDOR",
     "TTS_KEY",
     "TTS_VOICE_ID",
   ];
 
-  const optionalVars = ["AGORA_APP_CERTIFICATE"];
+  const optionalVars: string[] = [];
 
   const configured: Record<string, boolean> = {};
   const missing: string[] = [];

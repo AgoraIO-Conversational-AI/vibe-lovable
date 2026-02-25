@@ -1,4 +1,4 @@
-import { RtcTokenBuilder, RtmTokenBuilder, RtcRole, RtmRole } from "npm:agora-access-token@2.0.4";
+import { AccessToken, ServiceRtc, ServiceRtm } from "npm:agora-token";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,24 +20,23 @@ function generateChannel(): string {
 
 function buildToken(
   channelName: string,
-  uid: number,
+  uid: string,
   appId: string,
   appCertificate: string
 ): string {
   const expirationTimeInSeconds = 86400;
-  const currentTimestamp = Math.floor(Date.now() / 1000);
-  const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
+  const token = new AccessToken(appId, appCertificate, expirationTimeInSeconds);
 
-  const rtcToken = RtcTokenBuilder.buildTokenWithUid(
-    appId,
-    appCertificate,
-    channelName,
-    uid,
-    RtcRole.PUBLISHER,
-    privilegeExpiredTs
-  );
+  const rtcService = new ServiceRtc(channelName, uid);
+  rtcService.addPrivilege(ServiceRtc.kPrivilegeJoinChannel, expirationTimeInSeconds);
+  rtcService.addPrivilege(ServiceRtc.kPrivilegePublishAudioStream, expirationTimeInSeconds);
+  token.addService(rtcService);
 
-  return rtcToken;
+  const rtmService = new ServiceRtm(uid);
+  rtmService.addPrivilege(ServiceRtm.kPrivilegeLogin, expirationTimeInSeconds);
+  token.addService(rtmService);
+
+  return token.build();
 }
 
 function buildTtsConfig(vendor: string, key: string, voiceId: string) {
@@ -100,9 +99,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const AGORA_APP_ID = Deno.env.get("AGORA_APP_ID") || "";
-    const AGORA_APP_CERTIFICATE = Deno.env.get("AGORA_APP_CERTIFICATE") || "";
-    const AGORA_AUTH_HEADER = Deno.env.get("AGORA_AUTH_HEADER") || "";
+    const APP_ID = Deno.env.get("APP_ID") || "";
+    const APP_CERTIFICATE = Deno.env.get("APP_CERTIFICATE") || "";
+    const AGENT_AUTH_HEADER = Deno.env.get("AGENT_AUTH_HEADER") || "";
     const LLM_API_KEY = Deno.env.get("LLM_API_KEY") || "";
     const LLM_MODEL = Deno.env.get("LLM_MODEL") || "gpt-4o-mini";
     const LLM_URL =
@@ -133,9 +132,9 @@ Deno.serve(async (req) => {
     let userToken: string;
     let agentToken: string;
 
-    if (AGORA_APP_CERTIFICATE) {
-      userToken = buildToken(channel, Number(USER_UID), AGORA_APP_ID, AGORA_APP_CERTIFICATE);
-      agentToken = buildToken(channel, Number(AGENT_UID), AGORA_APP_ID, AGORA_APP_CERTIFICATE);
+    if (APP_CERTIFICATE) {
+      userToken = buildToken(channel, USER_UID, APP_ID, APP_CERTIFICATE);
+      agentToken = buildToken(channel, AGENT_UID, APP_ID, APP_CERTIFICATE);
     } else {
       // No certificate: use null tokens (App ID-only auth)
       userToken = "";
@@ -185,14 +184,14 @@ Deno.serve(async (req) => {
     };
 
     // Call Agora ConvoAI API
-    const agoraUrl = `https://api.agora.io/api/conversational-ai-agent/v2/projects/${AGORA_APP_ID}/join`;
+    const agoraUrl = `https://api.agora.io/api/conversational-ai-agent/v2/projects/${APP_ID}/join`;
     
     // Call Agora ConvoAI API
     const agoraRes = await fetch(agoraUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: AGORA_AUTH_HEADER,
+        Authorization: AGENT_AUTH_HEADER,
       },
       body: JSON.stringify(payload),
     });
@@ -210,7 +209,7 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        appId: AGORA_APP_ID,
+        appId: APP_ID,
         channel,
         token: userToken || null,
         uid: USER_UID,
