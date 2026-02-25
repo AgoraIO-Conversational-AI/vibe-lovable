@@ -45,6 +45,7 @@ export function useAgoraVoiceClient() {
   const transcriptCallbackRef = useRef<((msg: Record<string, unknown>) => void) | null>(null);
   const channelRef = useRef<string>("");
   const agentRtmUidRef = useRef<string>("");
+  const messageCacheRef = useRef<Map<string, { part_idx: number; content: string }[]>>(new Map());
 
   // Monitor remote audio volume
   useEffect(() => {
@@ -131,13 +132,39 @@ export function useAgoraVoiceClient() {
 
         rtcClient.on("stream-message", (_uid: number, data: Uint8Array) => {
           try {
-            const text = new TextDecoder().decode(data);
-            const msg = JSON.parse(text);
-            if (msg.object && msg.text !== undefined) {
-              transcriptCallbackRef.current?.(msg);
+            const raw = new TextDecoder().decode(data);
+            const parts = raw.split("|");
+
+            if (parts.length === 4) {
+              // v2 chunked format: messageId|partIdx|partSum|base64data
+              const [msgId, partIdxStr, partSumStr, partData] = parts;
+              const partIdx = parseInt(partIdxStr, 10);
+              const partSum = partSumStr === "???" ? -1 : parseInt(partSumStr, 10);
+              const cache = messageCacheRef.current;
+
+              if (!cache.has(msgId)) cache.set(msgId, []);
+              const chunks = cache.get(msgId)!;
+              chunks.push({ part_idx: partIdx, content: partData });
+              chunks.sort((a, b) => a.part_idx - b.part_idx);
+
+              if (partSum !== -1 && chunks.length === partSum) {
+                const base64 = chunks.map((c) => c.content).join("");
+                const decoded = atob(base64);
+                const msg = JSON.parse(decoded);
+                cache.delete(msgId);
+                if (msg.object && msg.text !== undefined) {
+                  transcriptCallbackRef.current?.(msg);
+                }
+              }
+            } else if (raw.startsWith("{")) {
+              // Fallback: raw JSON (non-chunked)
+              const msg = JSON.parse(raw);
+              if (msg.object && msg.text !== undefined) {
+                transcriptCallbackRef.current?.(msg);
+              }
             }
           } catch {
-            /* ignore non-JSON data messages */
+            /* ignore malformed data */
           }
         });
 

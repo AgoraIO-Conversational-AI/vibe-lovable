@@ -79,17 +79,17 @@ supabase secrets set \
 # supabase secrets set LLM_MODEL=gpt-4o-mini
 ```
 
-| Variable            | Required | Description                                                                         |
-| ------------------- | -------- | ----------------------------------------------------------------------------------- |
-| `APP_ID`            | Yes      | 32-char hex App ID from [Agora Console](https://console.agora.io)                   |
-| `AGENT_AUTH_HEADER` | Yes      | `Basic <base64(customerKey:customerSecret)>` — Agora REST API auth                  |
-| `LLM_API_KEY`       | Yes      | OpenAI API key (or compatible provider)                                             |
-| `TTS_VENDOR`        | Yes      | One of: `rime`, `openai`, `elevenlabs`, `cartesia`                                  |
-| `TTS_KEY`           | Yes      | API key for your chosen TTS vendor                                                  |
-| `TTS_VOICE_ID`      | Yes      | Voice ID (e.g. `astra` for Rime, `alloy` for OpenAI, voice ID for ElevenLabs)       |
-| `APP_CERTIFICATE`   | No       | App Certificate — enables token auth for RTC + RTM. Omit for testing without tokens |
-| `LLM_URL`           | No       | Custom LLM endpoint (defaults to `https://api.openai.com/v1/chat/completions`)      |
-| `LLM_MODEL`         | No       | Model name (defaults to `gpt-4o-mini`)                                              |
+| Variable            | Required | Description                                                                                                                                                                                |
+| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `APP_ID`            | Yes      | 32-char hex App ID from [Agora Console](https://console.agora.io)                                                                                                                          |
+| `AGENT_AUTH_HEADER` | Yes      | `Basic <base64(customerKey:customerSecret)>` — Agora REST API auth                                                                                                                         |
+| `LLM_API_KEY`       | Yes      | OpenAI API key (or compatible provider)                                                                                                                                                    |
+| `TTS_VENDOR`        | Yes      | One of: `rime`, `openai`, `elevenlabs`, `cartesia`                                                                                                                                         |
+| `TTS_KEY`           | Yes      | API key for your chosen TTS vendor                                                                                                                                                         |
+| `TTS_VOICE_ID`      | Yes      | Voice ID (e.g. `astra` for Rime, `alloy` for OpenAI, voice ID for ElevenLabs)                                                                                                              |
+| `APP_CERTIFICATE`   | No       | App Certificate — enables token auth for RTC + RTM. **Leave empty or omit entirely for testing without tokens.** When omitted, the app uses `APP_ID` as the token value (required by RTM). |
+| `LLM_URL`           | No       | Custom LLM endpoint (defaults to `https://api.openai.com/v1/chat/completions`)                                                                                                             |
+| `LLM_MODEL`         | No       | Model name (defaults to `gpt-4o-mini`)                                                                                                                                                     |
 
 ## Implementation Details
 
@@ -199,10 +199,37 @@ client.on("user-published", async (user, mediaType) => {
 });
 
 // CRITICAL: Transcript listener — agent sends ALL transcripts via RTC data stream
+// Protocol v2 sends data as pipe-delimited base64 chunks: messageId|partIdx|partSum|base64data
+// You MUST decode this format — raw JSON.parse() will NOT work.
+const messageCache = new Map<string, { part_idx: number; content: string }[]>();
+
 client.on("stream-message", (_uid: number, data: Uint8Array) => {
   try {
-    const text = new TextDecoder().decode(data);
-    const msg = JSON.parse(text);
+    const raw = new TextDecoder().decode(data);
+    const parts = raw.split("|");
+
+    let msg: any;
+    if (parts.length === 4) {
+      // v2 chunked format: messageId|partIdx|partSum|base64data
+      const [msgId, partIdxStr, partSumStr, partData] = parts;
+      const partIdx = parseInt(partIdxStr, 10);
+      const partSum = partSumStr === "???" ? -1 : parseInt(partSumStr, 10);
+
+      if (!messageCache.has(msgId)) messageCache.set(msgId, []);
+      const chunks = messageCache.get(msgId)!;
+      chunks.push({ part_idx: partIdx, content: partData });
+      chunks.sort((a, b) => a.part_idx - b.part_idx);
+
+      if (partSum === -1 || chunks.length < partSum) return; // wait for more chunks
+      const base64 = chunks.map((c) => c.content).join("");
+      msg = JSON.parse(atob(base64));
+      messageCache.delete(msgId);
+    } else if (raw.startsWith("{")) {
+      msg = JSON.parse(raw); // fallback: raw JSON
+    } else {
+      return;
+    }
+
     // msg.object = "user.transcription" or "assistant.transcription"
     // msg.text = transcript text
     // msg.turn_id = groups messages into turns
@@ -213,11 +240,10 @@ client.on("stream-message", (_uid: number, data: Uint8Array) => {
         msg.object === "assistant.transcription" ? "assistant" : "user";
       const isFinal =
         role === "user" ? msg.final === true : msg.turn_status === 1;
-      // Update or add message in chat UI grouped by turn_id
       updateMessages(role, msg.turn_id, msg.text, isFinal);
     }
   } catch {
-    /* ignore non-JSON data messages */
+    /* ignore malformed data */
   }
 });
 
@@ -231,7 +257,7 @@ const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
 await client.publish(audioTrack);
 ```
 
-**IMPORTANT: Transcripts arrive via RTC `stream-message`, NOT via RTM.** Both user speech transcripts and agent response transcripts come through this single listener. The agent greeting also arrives here — do not hardcode it. Display transcripts as chat bubbles grouped by `turn_id`. Update in-place for partial transcripts, mark final when complete.
+**IMPORTANT: Transcripts arrive via RTC `stream-message`, NOT via RTM.** Protocol v2 encodes transcripts as base64 inside a pipe-delimited string (`messageId|partIdx|partSum|base64data`) — you MUST split on `|`, accumulate chunks by messageId, `atob()` the joined base64, then `JSON.parse()`. Raw `JSON.parse()` on the stream data will NOT work. Both user speech transcripts and agent response transcripts come through this single listener. The agent greeting also arrives here — do not hardcode it. Display transcripts as chat bubbles grouped by `turn_id`. Update in-place for partial transcripts, mark final when complete.
 
 ### Frontend: RTM Text Messaging (send only)
 
