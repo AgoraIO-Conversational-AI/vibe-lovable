@@ -59,37 +59,37 @@ Supabase Edge Functions (Deno)
   └─ hangup-agent   — stops the agent
 ```
 
-## Environment Variables
+## Required Secrets (Edge Functions)
 
-**IMPORTANT: All variables are server-side Supabase secrets only. They are read via `Deno.env.get()` in edge functions — never exposed to the browser. The app uses exactly these variable names.**
+Configure these as secrets in Lovable Cloud (or Supabase Edge Function secrets). All variables are server-side only — they are read via `Deno.env.get()` in edge functions and never exposed to the browser. The app uses exactly these variable names.
 
-There are exactly 6 required and 3 optional variables. Do not invent additional variables.
+| Secret              | Required    | Description                                                                                        |
+| ------------------- | ----------- | -------------------------------------------------------------------------------------------------- |
+| `APP_ID`            | ✅          | Agora App ID                                                                                       |
+| `APP_CERTIFICATE`   | ❌ Optional | Agora App Certificate. Leave empty or set to `""` if token auth is disabled on your Agora project. |
+| `AGENT_AUTH_HEADER` | ✅          | Agora REST API auth header (e.g. `Basic <base64>`)                                                 |
+| `LLM_API_KEY`       | ✅          | API key for your LLM provider                                                                      |
+| `LLM_URL`           | ❌ Optional | LLM endpoint URL (default: `https://api.openai.com/v1/chat/completions`)                           |
+| `LLM_MODEL`         | ❌ Optional | LLM model name (default: `gpt-4o-mini`)                                                            |
+| `TTS_VENDOR`        | ❌ Optional | TTS vendor: `openai`, `elevenlabs`, `cartesia`, or `rime` (default: `rime`)                        |
+| `TTS_KEY`           | ✅          | API key for your TTS provider                                                                      |
+| `TTS_VOICE_ID`      | ❌ Optional | Voice ID for TTS (default: `astra`)                                                                |
+
+> **Note:** `APP_CERTIFICATE` is optional. If your Agora project does not have token authentication enabled, you do not need to set this secret at all.
 
 ```bash
 supabase secrets set \
   APP_ID=your_32_char_hex_app_id \
   AGENT_AUTH_HEADER="Basic <base64(customerKey:customerSecret)>" \
   LLM_API_KEY=sk-your-openai-key \
-  TTS_VENDOR=rime \
-  TTS_KEY=your-tts-api-key \
-  TTS_VOICE_ID=astra
+  TTS_KEY=your-tts-api-key
 # Optional:
 # supabase secrets set APP_CERTIFICATE=your_32_char_hex_certificate
+# supabase secrets set TTS_VENDOR=rime
+# supabase secrets set TTS_VOICE_ID=astra
 # supabase secrets set LLM_URL=https://api.openai.com/v1/chat/completions
 # supabase secrets set LLM_MODEL=gpt-4o-mini
 ```
-
-| Variable            | Required | Description                                                                                                                                                                                |
-| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `APP_ID`            | Yes      | 32-char hex App ID from [Agora Console](https://console.agora.io)                                                                                                                          |
-| `AGENT_AUTH_HEADER` | Yes      | `Basic <base64(customerKey:customerSecret)>` — Agora REST API auth                                                                                                                         |
-| `LLM_API_KEY`       | Yes      | OpenAI API key (or compatible provider)                                                                                                                                                    |
-| `TTS_VENDOR`        | Yes      | One of: `rime`, `openai`, `elevenlabs`, `cartesia`                                                                                                                                         |
-| `TTS_KEY`           | Yes      | API key for your chosen TTS vendor                                                                                                                                                         |
-| `TTS_VOICE_ID`      | Yes      | Voice ID (e.g. `astra` for Rime, `alloy` for OpenAI, voice ID for ElevenLabs)                                                                                                              |
-| `APP_CERTIFICATE`   | No       | App Certificate — enables token auth for RTC + RTM. **Leave empty or omit entirely for testing without tokens.** When omitted, the app uses `APP_ID` as the token value (required by RTM). |
-| `LLM_URL`           | No       | Custom LLM endpoint (defaults to `https://api.openai.com/v1/chat/completions`)                                                                                                             |
-| `LLM_MODEL`         | No       | Model name (defaults to `gpt-4o-mini`)                                                                                                                                                     |
 
 ## Implementation Details
 
