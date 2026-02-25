@@ -29,12 +29,12 @@ npm install
 ```bash
 supabase secrets set \
   APP_ID=<your-app-id> \
-  APP_CERTIFICATE=<your-app-certificate> \
   AGENT_AUTH_HEADER="Basic <base64(customerKey:customerSecret)>" \
   LLM_API_KEY=<your-openai-key> \
   TTS_VENDOR=rime \
   TTS_KEY=<your-tts-key> \
   TTS_VOICE_ID=astra
+# Optional: APP_CERTIFICATE=<your-app-certificate>  (enables token auth)
 ```
 
 ### 3. Deploy edge functions
@@ -70,23 +70,24 @@ Supabase Edge Functions (Deno)
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `APP_ID` | Yes | 32-char hex App ID from [Agora Console](https://console.agora.io) |
-| `APP_CERTIFICATE` | Yes | App Certificate (enables token auth for RTC + RTM) |
-| `AGENT_AUTH_HEADER` | Yes | `Basic <base64(customerKey:customerSecret)>` for the REST API |
-| `LLM_API_KEY` | Yes | OpenAI API key (or compatible provider) |
-| `TTS_VENDOR` | Yes | `rime`, `openai`, `elevenlabs`, or `cartesia` |
-| `TTS_KEY` | Yes | API key for your TTS vendor |
-| `TTS_VOICE_ID` | Yes | Voice ID (e.g. `astra` for Rime, `alloy` for OpenAI) |
-| `LLM_URL` | No | Custom LLM endpoint (defaults to OpenAI) |
-| `LLM_MODEL` | No | Model name (defaults to `gpt-4o-mini`) |
+| Variable            | Required | Description                                                                          |
+| ------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `APP_ID`            | Yes      | 32-char hex App ID from [Agora Console](https://console.agora.io)                    |
+| `APP_CERTIFICATE`   | No       | App Certificate — enables token auth for RTC + RTM (omit for testing without tokens) |
+| `AGENT_AUTH_HEADER` | Yes      | `Basic <base64(customerKey:customerSecret)>` for the REST API                        |
+| `LLM_API_KEY`       | Yes      | OpenAI API key (or compatible provider)                                              |
+| `TTS_VENDOR`        | Yes      | `rime`, `openai`, `elevenlabs`, or `cartesia`                                        |
+| `TTS_KEY`           | Yes      | API key for your TTS vendor                                                          |
+| `TTS_VOICE_ID`      | Yes      | Voice ID (e.g. `astra` for Rime, `alloy` for OpenAI)                                 |
+| `LLM_URL`           | No       | Custom LLM endpoint (defaults to OpenAI)                                             |
+| `LLM_MODEL`         | No       | Model name (defaults to `gpt-4o-mini`)                                               |
 
 ## Implementation Details
 
 ### Edge Function: `check-env`
 
-Validates all 7 required env vars are set via `Deno.env.get()`. Returns JSON:
+Validates all 6 required env vars are set via `Deno.env.get()`. `APP_CERTIFICATE` is optional (reported but not required). Returns JSON:
+
 ```json
 { "configured": { "APP_ID": true, ... }, "ready": true, "missing": [] }
 ```
@@ -96,10 +97,16 @@ Validates all 7 required env vars are set via `Deno.env.get()`. Returns JSON:
 Accepts optional POST body `{ prompt, greeting }`. Defaults: prompt = "You are a friendly voice assistant. Keep responses concise, around 10 to 20 words." greeting = "Hi there! How can I help you today?"
 
 **Token generation** — combined RTC+RTM token using `npm:agora-token`:
+
 ```typescript
 import { AccessToken, ServiceRtc, ServiceRtm } from "npm:agora-token";
 
-function buildToken(channelName: string, uid: string, appId: string, appCertificate: string): string {
+function buildToken(
+  channelName: string,
+  uid: string,
+  appId: string,
+  appCertificate: string,
+): string {
   const token = new AccessToken(appId, appCertificate, 86400);
   const rtcService = new ServiceRtc(channelName, uid);
   rtcService.addPrivilege(ServiceRtc.kPrivilegeJoinChannel, 86400);
@@ -115,6 +122,7 @@ function buildToken(channelName: string, uid: string, appId: string, appCertific
 UIDs are strings: agent = `"100"`, user = `"101"`. Channel is random 10-char alphanumeric. Agent RTM UID = `"100-{channel}"`.
 
 **Agent payload** — POST to `https://api.agora.io/api/conversational-ai-agent/v2/projects/{appId}/join`:
+
 ```json
 {
   "name": "{channel}",
@@ -146,13 +154,18 @@ UIDs are strings: agent = `"100"`, user = `"101"`. Channel is random 10-char alp
     "asr": { "vendor": "ares", "language": "en-US" },
     "tts": "{ttsConfig}",
     "parameters": {
-      "transcript": { "enable": true, "protocol_version": "v2", "enable_words": false }
+      "transcript": {
+        "enable": true,
+        "protocol_version": "v2",
+        "enable_words": false
+      }
     }
   }
 }
 ```
 
 **TTS config builder** — supports multiple vendors:
+
 - **rime** (default): `{ vendor: "rime", params: { api_key, speaker: voiceId, modelId: "mistv2", lang: "eng", samplingRate: 16000, speedAlpha: 1.0 } }`
 - **openai**: `{ vendor: "openai", params: { api_key, model: "tts-1", voice: voiceId, response_format: "pcm", speed: 1.0 } }`
 - **elevenlabs**: `{ vendor: "elevenlabs", params: { key, model_id: "eleven_flash_v2_5", voice_id: voiceId, stability: 0.5, sample_rate: 24000 } }`
@@ -167,6 +180,7 @@ POST with `{ agentId }`. Calls `POST https://api.agora.io/api/conversational-ai-
 ### supabase/config.toml
 
 All three functions need JWT verification disabled:
+
 ```toml
 [functions.check-env]
 verify_jwt = false
@@ -183,12 +197,16 @@ verify_jwt = false
 Install `agora-rtc-sdk-ng` and `agora-rtm` from npm. Dynamically import both at connect time (browser-only SDKs).
 
 **RTC setup:**
+
 ```typescript
 const AgoraRTC = (await import("agora-rtc-sdk-ng")).default;
 const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
 await client.join(appId, channel, token, uid);
 const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
-  encoderConfig: "high_quality_stereo", AEC: true, ANS: true, AGC: true
+  encoderConfig: "high_quality_stereo",
+  AEC: true,
+  ANS: true,
+  AGC: true,
 });
 await client.publish(audioTrack);
 ```
@@ -196,6 +214,7 @@ await client.publish(audioTrack);
 Subscribe to agent audio on `user-published` and play it. Monitor remote audio volume to detect agent speaking state.
 
 **Transcript listener** — the agent sends transcripts via RTC data stream:
+
 ```typescript
 client.on("stream-message", (_uid: number, data: Uint8Array) => {
   const text = new TextDecoder().decode(data);
@@ -211,9 +230,12 @@ client.on("stream-message", (_uid: number, data: Uint8Array) => {
 Display transcripts as chat bubbles grouped by `turn_id`. Update in-place for partial transcripts, mark final when complete. No hardcoded greeting — the agent sends its greeting via the transcript stream.
 
 **RTM for text messaging:**
+
 ```typescript
 const AgoraRTM = await import("agora-rtm");
-const rtm = new AgoraRTM.default.RTM(appId, String(uid), { token: token ?? undefined });
+const rtm = new AgoraRTM.default.RTM(appId, String(uid), {
+  token: token ?? undefined,
+});
 await rtm.login();
 // Send text: await rtm.publish(channel, text);
 // Disconnect: await rtm.logout();
