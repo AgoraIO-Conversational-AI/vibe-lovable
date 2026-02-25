@@ -59,43 +59,38 @@ Supabase Edge Functions (Deno)
   └─ hangup-agent   — stops the agent
 ```
 
-## Required Secrets (Edge Functions)
+## Secrets (Edge Functions)
 
-Configure these as secrets in Lovable Cloud (or Supabase Edge Function secrets). All variables are server-side only — they are read via `Deno.env.get()` in edge functions and never exposed to the browser. The app uses exactly these variable names.
+Configure these as secrets in Lovable Cloud (or Supabase Edge Function secrets). All are server-side only — read via `Deno.env.get()`, never exposed to the browser.
 
-| Secret              | Required    | Description                                                                                        |
-| ------------------- | ----------- | -------------------------------------------------------------------------------------------------- |
-| `APP_ID`            | ✅          | Agora App ID                                                                                       |
-| `APP_CERTIFICATE`   | ❌ Optional | Agora App Certificate. Leave empty or set to `""` if token auth is disabled on your Agora project. |
-| `AGENT_AUTH_HEADER` | ✅          | Agora REST API auth header (e.g. `Basic <base64>`)                                                 |
-| `LLM_API_KEY`       | ✅          | API key for your LLM provider                                                                      |
-| `LLM_URL`           | ❌ Optional | LLM endpoint URL (default: `https://api.openai.com/v1/chat/completions`)                           |
-| `LLM_MODEL`         | ❌ Optional | LLM model name (default: `gpt-4o-mini`)                                                            |
-| `TTS_VENDOR`        | ✅          | TTS vendor: `openai`, `elevenlabs`, `cartesia`, or `rime`                                          |
-| `TTS_KEY`           | ✅          | API key for your TTS provider                                                                      |
-| `TTS_VOICE_ID`      | ✅          | Voice ID for TTS (e.g. `astra` for Rime, `alloy` for OpenAI)                                       |
+**Required (no defaults):**
 
-> **Note:** `APP_CERTIFICATE` is optional. If your Agora project does not have token authentication enabled, you do not need to set this secret at all.
+- `APP_ID` — Your Agora project App ID
+- `AGENT_AUTH_HEADER` — Auth header for Agora Conversational AI API (e.g. `Basic <base64(customerKey:customerSecret)>`)
+- `LLM_API_KEY` — API key for your LLM provider (e.g. OpenAI)
+- `TTS_KEY` — API key for your TTS provider
+
+**Optional (have defaults):**
+
+- `APP_CERTIFICATE` — Agora App Certificate. **Default: empty (no token auth).** Leave unset or set to `""` if your Agora project does not use token authentication.
+- `TTS_VENDOR` — Default: `rime`. Options: `rime`, `openai`, `elevenlabs`, `cartesia`
+- `TTS_VOICE_ID` — Default: `astra`. Examples: `astra` (Rime), `alloy` (OpenAI)
+- `LLM_URL` — Default: `https://api.openai.com/v1/chat/completions`
+- `LLM_MODEL` — Default: `gpt-4o-mini`
 
 ```bash
 supabase secrets set \
-  APP_ID=your_32_char_hex_app_id \
+  APP_ID=your_agora_app_id \
   AGENT_AUTH_HEADER="Basic <base64(customerKey:customerSecret)>" \
   LLM_API_KEY=sk-your-openai-key \
-  TTS_KEY=your-tts-api-key \
-  TTS_VENDOR=rime \
-  TTS_VOICE_ID=astra
-# Optional:
-# supabase secrets set APP_CERTIFICATE=your_32_char_hex_certificate
-# supabase secrets set LLM_URL=https://api.openai.com/v1/chat/completions
-# supabase secrets set LLM_MODEL=gpt-4o-mini
+  TTS_KEY=your-tts-api-key
 ```
 
 ## Implementation Details
 
 ### Edge Function: `check-env`
 
-Validates the 6 required env vars (`APP_ID`, `AGENT_AUTH_HEADER`, `LLM_API_KEY`, `TTS_KEY`, `TTS_VENDOR`, `TTS_VOICE_ID`) are set via `Deno.env.get()`. Optional vars (`APP_CERTIFICATE`, `LLM_URL`, `LLM_MODEL`) are reported but not required. Returns JSON:
+Validates the 4 required secrets (`APP_ID`, `AGENT_AUTH_HEADER`, `LLM_API_KEY`, `TTS_KEY`) are set. Optional vars (`APP_CERTIFICATE`, `TTS_VENDOR`, `TTS_VOICE_ID`, `LLM_URL`, `LLM_MODEL`) are reported but not required — `start-agent` provides defaults. Returns JSON:
 
 ```json
 { "configured": { "APP_ID": true, ... }, "ready": true, "missing": [] }
