@@ -79,17 +79,17 @@ supabase secrets set \
 # supabase secrets set LLM_MODEL=gpt-4o-mini
 ```
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `APP_ID` | Yes | 32-char hex App ID from [Agora Console](https://console.agora.io) |
-| `AGENT_AUTH_HEADER` | Yes | `Basic <base64(customerKey:customerSecret)>` — Agora REST API auth |
-| `LLM_API_KEY` | Yes | OpenAI API key (or compatible provider) |
-| `TTS_VENDOR` | Yes | One of: `rime`, `openai`, `elevenlabs`, `cartesia` |
-| `TTS_KEY` | Yes | API key for your chosen TTS vendor |
-| `TTS_VOICE_ID` | Yes | Voice ID (e.g. `astra` for Rime, `alloy` for OpenAI, voice ID for ElevenLabs) |
-| `APP_CERTIFICATE` | No | App Certificate — enables token auth for RTC + RTM. Omit for testing without tokens |
-| `LLM_URL` | No | Custom LLM endpoint (defaults to `https://api.openai.com/v1/chat/completions`) |
-| `LLM_MODEL` | No | Model name (defaults to `gpt-4o-mini`) |
+| Variable            | Required | Description                                                                         |
+| ------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `APP_ID`            | Yes      | 32-char hex App ID from [Agora Console](https://console.agora.io)                   |
+| `AGENT_AUTH_HEADER` | Yes      | `Basic <base64(customerKey:customerSecret)>` — Agora REST API auth                  |
+| `LLM_API_KEY`       | Yes      | OpenAI API key (or compatible provider)                                             |
+| `TTS_VENDOR`        | Yes      | One of: `rime`, `openai`, `elevenlabs`, `cartesia`                                  |
+| `TTS_KEY`           | Yes      | API key for your chosen TTS vendor                                                  |
+| `TTS_VOICE_ID`      | Yes      | Voice ID (e.g. `astra` for Rime, `alloy` for OpenAI, voice ID for ElevenLabs)       |
+| `APP_CERTIFICATE`   | No       | App Certificate — enables token auth for RTC + RTM. Omit for testing without tokens |
+| `LLM_URL`           | No       | Custom LLM endpoint (defaults to `https://api.openai.com/v1/chat/completions`)      |
+| `LLM_MODEL`         | No       | Model name (defaults to `gpt-4o-mini`)                                              |
 
 ## Implementation Details
 
@@ -217,7 +217,7 @@ client.on("stream-message", (_uid: number, data: Uint8Array) => {
 
 Display transcripts as chat bubbles grouped by `turn_id`. Update in-place for partial transcripts, mark final when complete. No hardcoded greeting — the agent sends its greeting via the transcript stream.
 
-**RTM is used ONLY for sending text messages** from the user to the agent. Do NOT use RTM stream channels or `createStreamChannel`. Use `rtm.publish()` directly:
+**RTM is used ONLY for sending text messages** from the user to the agent. Do NOT use RTM stream channels or `createStreamChannel`.
 
 ```typescript
 const AgoraRTM = await import("agora-rtm");
@@ -225,9 +225,19 @@ const rtm = new AgoraRTM.default.RTM(appId, String(uid), {
   token: token ?? undefined,
 });
 await rtm.login();
-// Send text: await rtm.publish(channel, text);
-// Disconnect: await rtm.logout();
+
+// Send text message to agent — publish to agent's RTM UID, NOT the channel name
+const payload = JSON.stringify({ message: text, priority: "APPEND" });
+await rtm.publish(agentRtmUid, payload, {
+  customType: "user.transcription",
+  channelType: "USER",
+});
+
+// Disconnect
+await rtm.logout();
 ```
+
+**IMPORTANT:** The publish target is `agentRtmUid` (e.g. `"100-{channel}"`), NOT the channel name. The message must be JSON with `{ message, priority }` format, and the options must include `customType: "user.transcription"` and `channelType: "USER"`.
 
 ### Frontend: UI Layout
 
