@@ -219,11 +219,12 @@ Deno.serve(async (req) => {
 
     const channel = generateChannel();
 
-    // Token generation
+    // Token generation: real tokens if certificate exists, APP_ID otherwise
     let userToken = "";
     let agentToken = "";
+    const hasCertificate = APP_CERTIFICATE && /^[0-9a-f]{32}$/i.test(APP_CERTIFICATE);
 
-    if (APP_CERTIFICATE) {
+    if (hasCertificate) {
       userToken = await buildToken(channel, USER_UID, APP_ID, APP_CERTIFICATE);
       agentToken = await buildToken(channel, AGENT_UID, APP_ID, APP_CERTIFICATE);
     }
@@ -235,7 +236,7 @@ Deno.serve(async (req) => {
       name: channel,
       properties: {
         channel,
-        token: agentToken,
+        token: agentToken || APP_ID,
         agent_rtc_uid: AGENT_UID,
         agent_rtm_uid: agentRtmUid,
         remote_rtc_uids: ["*"],
@@ -298,7 +299,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         appId: APP_ID,
         channel,
-        token: userToken || null,
+        token: userToken || APP_ID,
         uid: USER_UID,
         agentUid: AGENT_UID,
         agentRtmUid: agentRtmUid,
