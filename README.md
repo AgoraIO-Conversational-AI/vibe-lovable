@@ -184,11 +184,43 @@ verify_jwt = false
 
 Install `agora-rtc-sdk-ng` and `agora-rtm` from npm. Dynamically import both at connect time (browser-only SDKs).
 
-**RTC setup:**
+**RTC setup — register `stream-message` listener BEFORE `client.join()`:**
 
 ```typescript
 const AgoraRTC = (await import("agora-rtc-sdk-ng")).default;
 const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+
+// Subscribe to agent audio
+client.on("user-published", async (user, mediaType) => {
+  if (mediaType !== "audio") return;
+  await client.subscribe(user, "audio");
+  user.audioTrack?.play();
+  // Poll user.audioTrack.getVolumeLevel() to detect agent speaking
+});
+
+// CRITICAL: Transcript listener — agent sends ALL transcripts via RTC data stream
+client.on("stream-message", (_uid: number, data: Uint8Array) => {
+  try {
+    const text = new TextDecoder().decode(data);
+    const msg = JSON.parse(text);
+    // msg.object = "user.transcription" or "assistant.transcription"
+    // msg.text = transcript text
+    // msg.turn_id = groups messages into turns
+    // For user: msg.final = true means end of utterance
+    // For assistant: msg.turn_status === 1 means end of turn
+    if (msg.object && msg.text !== undefined) {
+      const role =
+        msg.object === "assistant.transcription" ? "assistant" : "user";
+      const isFinal =
+        role === "user" ? msg.final === true : msg.turn_status === 1;
+      // Update or add message in chat UI grouped by turn_id
+      updateMessages(role, msg.turn_id, msg.text, isFinal);
+    }
+  } catch {
+    /* ignore non-JSON data messages */
+  }
+});
+
 await client.join(appId, channel, token, uid);
 const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
   encoderConfig: "high_quality_stereo",
@@ -199,34 +231,20 @@ const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
 await client.publish(audioTrack);
 ```
 
-Subscribe to agent audio on `user-published` and play it. Monitor remote audio volume to detect agent speaking state.
+**IMPORTANT: Transcripts arrive via RTC `stream-message`, NOT via RTM.** Both user speech transcripts and agent response transcripts come through this single listener. The agent greeting also arrives here — do not hardcode it. Display transcripts as chat bubbles grouped by `turn_id`. Update in-place for partial transcripts, mark final when complete.
 
-**IMPORTANT: Transcripts arrive via RTC data stream, NOT via RTM.** Register this on the RTC client:
+### Frontend: RTM Text Messaging (send only)
 
-```typescript
-client.on("stream-message", (_uid: number, data: Uint8Array) => {
-  const text = new TextDecoder().decode(data);
-  const msg = JSON.parse(text);
-  // msg.object = "user.transcription" or "assistant.transcription"
-  // msg.text = transcript text
-  // msg.turn_id = groups messages into turns
-  // For user: msg.final = true means end of utterance
-  // For assistant: msg.turn_status === 1 means end of turn
-});
-```
-
-Display transcripts as chat bubbles grouped by `turn_id`. Update in-place for partial transcripts, mark final when complete. No hardcoded greeting — the agent sends its greeting via the transcript stream.
-
-**RTM is used ONLY for sending text messages** from the user to the agent. Do NOT use RTM stream channels or `createStreamChannel`.
+RTM is used **ONLY for sending text messages** from the user to the agent. Do NOT use `createStreamChannel`, `joinTopic`, `publishTopicMessage`, or `sendMessage`.
 
 ```typescript
 const AgoraRTM = await import("agora-rtm");
 const rtm = new AgoraRTM.default.RTM(appId, String(uid), {
   token: token ?? undefined,
 });
-await rtm.login();
+await rtm.login(); // no arguments — token goes in constructor above
 
-// Send text message to agent — publish to agent's RTM UID, NOT the channel name
+// Send text message — target is agent's RTM UID, NOT the channel name
 const payload = JSON.stringify({ message: text, priority: "APPEND" });
 await rtm.publish(agentRtmUid, payload, {
   customType: "user.transcription",
@@ -237,7 +255,13 @@ await rtm.publish(agentRtmUid, payload, {
 await rtm.logout();
 ```
 
-**IMPORTANT:** The publish target is `agentRtmUid` (e.g. `"100-{channel}"`), NOT the channel name. The message must be JSON with `{ message, priority }` format, and the options must include `customType: "user.transcription"` and `channelType: "USER"`.
+**IMPORTANT RTM rules:**
+
+- Publish target is `agentRtmUid` (e.g. `"100-{channel}"`), NOT the channel name
+- Message must be JSON: `{ "message": "text", "priority": "APPEND" }`
+- Options must include `customType: "user.transcription"` and `channelType: "USER"`
+- Show the user's message optimistically in the chat UI before sending
+- Never `console.log()` the RTM client object — it causes `RangeError: Invalid string length` from circular references
 
 ### Frontend: UI Layout
 
