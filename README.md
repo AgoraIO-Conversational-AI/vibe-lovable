@@ -71,9 +71,9 @@ Configure these as secrets in Lovable Cloud (or Supabase Edge Function secrets).
 | `LLM_API_KEY`       | ✅          | API key for your LLM provider                                                                      |
 | `LLM_URL`           | ❌ Optional | LLM endpoint URL (default: `https://api.openai.com/v1/chat/completions`)                           |
 | `LLM_MODEL`         | ❌ Optional | LLM model name (default: `gpt-4o-mini`)                                                            |
-| `TTS_VENDOR`        | ❌ Optional | TTS vendor: `openai`, `elevenlabs`, `cartesia`, or `rime` (default: `rime`)                        |
+| `TTS_VENDOR`        | ✅          | TTS vendor: `openai`, `elevenlabs`, `cartesia`, or `rime`                                          |
 | `TTS_KEY`           | ✅          | API key for your TTS provider                                                                      |
-| `TTS_VOICE_ID`      | ❌ Optional | Voice ID for TTS (default: `astra`)                                                                |
+| `TTS_VOICE_ID`      | ✅          | Voice ID for TTS (e.g. `astra` for Rime, `alloy` for OpenAI)                                       |
 
 > **Note:** `APP_CERTIFICATE` is optional. If your Agora project does not have token authentication enabled, you do not need to set this secret at all.
 
@@ -82,11 +82,11 @@ supabase secrets set \
   APP_ID=your_32_char_hex_app_id \
   AGENT_AUTH_HEADER="Basic <base64(customerKey:customerSecret)>" \
   LLM_API_KEY=sk-your-openai-key \
-  TTS_KEY=your-tts-api-key
+  TTS_KEY=your-tts-api-key \
+  TTS_VENDOR=rime \
+  TTS_VOICE_ID=astra
 # Optional:
 # supabase secrets set APP_CERTIFICATE=your_32_char_hex_certificate
-# supabase secrets set TTS_VENDOR=rime
-# supabase secrets set TTS_VOICE_ID=astra
 # supabase secrets set LLM_URL=https://api.openai.com/v1/chat/completions
 # supabase secrets set LLM_MODEL=gpt-4o-mini
 ```
@@ -95,7 +95,7 @@ supabase secrets set \
 
 ### Edge Function: `check-env`
 
-Validates the 4 required env vars (`APP_ID`, `AGENT_AUTH_HEADER`, `LLM_API_KEY`, `TTS_KEY`) are set via `Deno.env.get()`. Optional vars (`APP_CERTIFICATE`, `TTS_VENDOR`, `TTS_VOICE_ID`, `LLM_URL`, `LLM_MODEL`) are reported but not required — the app has sensible defaults. Returns JSON:
+Validates the 6 required env vars (`APP_ID`, `AGENT_AUTH_HEADER`, `LLM_API_KEY`, `TTS_KEY`, `TTS_VENDOR`, `TTS_VOICE_ID`) are set via `Deno.env.get()`. Optional vars (`APP_CERTIFICATE`, `LLM_URL`, `LLM_MODEL`) are reported but not required. Returns JSON:
 
 ```json
 { "configured": { "APP_ID": true, ... }, "ready": true, "missing": [] }
@@ -105,7 +105,7 @@ Validates the 4 required env vars (`APP_ID`, `AGENT_AUTH_HEADER`, `LLM_API_KEY`,
 
 Accepts optional POST body `{ prompt, greeting }`. Defaults: prompt = "You are a friendly voice assistant. Keep responses concise, around 10 to 20 words." greeting = "Hi there! How can I help you today?"
 
-**Token generation** — inline v007 token builder using Web Crypto + CompressionStream (no npm dependency). Generates combined RTC+RTM tokens when `APP_CERTIFICATE` is a valid 32-char hex string, otherwise falls back to using `APP_ID` as the token value (required for RTM to work without certificate auth). The algorithm: HMAC-SHA256 signing key chain (issueTs → appCertificate → salt), pack services as little-endian binary (RTC type=1 with joinChannel+publishAudio privileges, RTM type=2 with login privilege), HMAC-sign the packed info, deflate, base64, prefix with "007".
+**Token generation** — inline v007 token builder using Web Crypto + CompressionStream (no npm dependency). Generates combined RTC+RTM tokens when `APP_CERTIFICATE` is a valid 32-char hex string. When `APP_CERTIFICATE` is empty or not set, falls back to using `APP_ID` as the token value everywhere (required for RTM to work without certificate auth).
 
 UIDs are strings: agent = `"100"`, user = `"101"`. Channel is random 10-char alphanumeric. Agent RTM UID = `"100-{channel}"`.
 
@@ -257,7 +257,7 @@ const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
 await client.publish(audioTrack);
 ```
 
-**IMPORTANT: Transcripts arrive via RTC `stream-message`, NOT via RTM.** Protocol v2 encodes transcripts as base64 inside a pipe-delimited string (`messageId|partIdx|partSum|base64data`) — you MUST split on `|`, accumulate chunks by messageId, `atob()` the joined base64, then `JSON.parse()`. Raw `JSON.parse()` on the stream data will NOT work. Both user speech transcripts and agent response transcripts come through this single listener. The agent greeting also arrives here — do not hardcode it. Display transcripts as chat bubbles grouped by `turn_id`. Update in-place for partial transcripts, mark final when complete.
+**Transcripts arrive via RTC `stream-message`, NOT via RTM.** Protocol v2 encodes data as `messageId|partIdx|partSum|base64data` — you MUST decode with `atob()` then `JSON.parse()`. Raw `JSON.parse()` on stream data will NOT work. Display as chat bubbles grouped by `turn_id`, update in-place for partials.
 
 ### Frontend: RTM Text Messaging (send only)
 
@@ -281,13 +281,7 @@ await rtm.publish(agentRtmUid, payload, {
 await rtm.logout();
 ```
 
-**IMPORTANT RTM rules:**
-
-- Publish target is `agentRtmUid` (e.g. `"100-{channel}"`), NOT the channel name
-- Message must be JSON: `{ "message": "text", "priority": "APPEND" }`
-- Options must include `customType: "user.transcription"` and `channelType: "USER"`
-- Show the user's message optimistically in the chat UI before sending
-- Never `console.log()` the RTM client object — it causes `RangeError: Invalid string length` from circular references
+**RTM rules:** Target is `agentRtmUid` (e.g. `"100-{channel}"`), NOT the channel name. Message must be JSON `{ "message": "text", "priority": "APPEND" }` with options `{ customType: "user.transcription", channelType: "USER" }`. Show user message optimistically before sending. Never `console.log()` the RTM client object (circular refs crash).
 
 ### Frontend: UI Layout
 
