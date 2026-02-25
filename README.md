@@ -201,7 +201,7 @@ await client.publish(audioTrack);
 
 Subscribe to agent audio on `user-published` and play it. Monitor remote audio volume to detect agent speaking state.
 
-**Transcript listener** — the agent sends transcripts via RTC data stream:
+**IMPORTANT: Transcripts arrive via RTC data stream, NOT via RTM.** Register this on the RTC client:
 
 ```typescript
 client.on("stream-message", (_uid: number, data: Uint8Array) => {
@@ -217,7 +217,7 @@ client.on("stream-message", (_uid: number, data: Uint8Array) => {
 
 Display transcripts as chat bubbles grouped by `turn_id`. Update in-place for partial transcripts, mark final when complete. No hardcoded greeting — the agent sends its greeting via the transcript stream.
 
-**RTM for text messaging:**
+**RTM is used ONLY for sending text messages** from the user to the agent. Do NOT use RTM stream channels or `createStreamChannel`. Use `rtm.publish()` directly:
 
 ```typescript
 const AgoraRTM = await import("agora-rtm");
