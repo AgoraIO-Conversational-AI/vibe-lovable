@@ -262,7 +262,7 @@ RTM is used **ONLY for sending text messages** from the user to the agent. Do NO
 const AgoraRTM = await import("agora-rtm");
 const rtm = new AgoraRTM.default.RTM(appId, String(uid), {
   token: token ?? undefined,
-});
+} as any);
 await rtm.login(); // no arguments — token goes in constructor above
 
 // Send text message — target is agent's RTM UID, NOT the channel name

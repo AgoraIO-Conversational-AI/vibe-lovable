@@ -191,7 +191,7 @@ export function useAgoraVoiceClient() {
           const AgoraRTM = await import("agora-rtm");
           const rtm = new AgoraRTM.default.RTM(config.appId, String(config.uid), {
             token: config.token ?? undefined,
-          });
+          } as any);
           await rtm.login();
           rtmClientRef.current = rtm;
         } catch (err) {
