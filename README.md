@@ -290,13 +290,6 @@ await rtm.logout();
 - **Backend:** Supabase Edge Functions (Deno)
 - **Real-time:** agora-rtc-sdk-ng (voice), agora-rtm (text messaging)
 
-## Reference
-
-- [simple-backend](https://github.com/AgoraIO-Conversational-AI/agent-samples/tree/main/simple-backend) — Python reference implementation of the same token generation, start-agent, and hangup-agent logic used by the edge functions above
-- [Agora Conversational AI Docs](https://docs.agora.io/en/conversational-ai/overview/product-overview)
-- [Agora Console](https://console.agora.io)
-- [Agent Samples](https://github.com/AgoraIO-Conversational-AI/agent-samples)
-
 ## License
 
 MIT
