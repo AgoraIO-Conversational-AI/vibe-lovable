@@ -68,13 +68,13 @@ Configure these as secrets in Lovable Cloud (or Supabase Edge Function secrets).
 - `APP_ID` — Your Agora project App ID
 - `AGENT_AUTH_HEADER` — Auth header for Agora Conversational AI API (e.g. `Basic <base64(customerKey:customerSecret)>`)
 - `LLM_API_KEY` — API key for your LLM provider (e.g. OpenAI)
+- `TTS_VENDOR` — TTS provider. Options: `rime`, `openai`, `elevenlabs`, `cartesia`
 - `TTS_KEY` — API key for your TTS provider
+- `TTS_VOICE_ID` — Voice ID for your TTS provider (e.g. `astra` for Rime, `alloy` for OpenAI)
 
 **Optional (have defaults):**
 
 - `APP_CERTIFICATE` — Agora App Certificate. **Default: empty (no token auth).** Leave unset or set to `""` if your Agora project does not use token authentication.
-- `TTS_VENDOR` — Default: `rime`. Options: `rime`, `openai`, `elevenlabs`, `cartesia`
-- `TTS_VOICE_ID` — Default: `astra`. Examples: `astra` (Rime), `alloy` (OpenAI)
 - `LLM_URL` — Default: `https://api.openai.com/v1/chat/completions`
 - `LLM_MODEL` — Default: `gpt-4o-mini`
 
@@ -83,14 +83,16 @@ supabase secrets set \
   APP_ID=your_agora_app_id \
   AGENT_AUTH_HEADER="Basic <base64(customerKey:customerSecret)>" \
   LLM_API_KEY=sk-your-openai-key \
-  TTS_KEY=your-tts-api-key
+  TTS_VENDOR=rime \
+  TTS_KEY=your-tts-api-key \
+  TTS_VOICE_ID=astra
 ```
 
 ## Implementation Details
 
 ### Edge Function: `check-env`
 
-Validates the 4 required secrets (`APP_ID`, `AGENT_AUTH_HEADER`, `LLM_API_KEY`, `TTS_KEY`) are set. Optional vars (`APP_CERTIFICATE`, `TTS_VENDOR`, `TTS_VOICE_ID`, `LLM_URL`, `LLM_MODEL`) are reported but not required — `start-agent` provides defaults. Returns JSON:
+Validates the 6 required secrets (`APP_ID`, `AGENT_AUTH_HEADER`, `LLM_API_KEY`, `TTS_VENDOR`, `TTS_KEY`, `TTS_VOICE_ID`) are set. Optional vars (`APP_CERTIFICATE`, `LLM_URL`, `LLM_MODEL`) are reported but not required. Returns JSON:
 
 ```json
 { "configured": { "APP_ID": true, ... }, "ready": true, "missing": [] }

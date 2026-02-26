@@ -198,9 +198,9 @@ Deno.serve(async (req) => {
     const LLM_URL =
       Deno.env.get("LLM_URL") ||
       "https://api.openai.com/v1/chat/completions";
-    const TTS_VENDOR = Deno.env.get("TTS_VENDOR") || "rime";
+    const TTS_VENDOR = Deno.env.get("TTS_VENDOR") || "";
     const TTS_KEY = Deno.env.get("TTS_KEY") || "";
-    const TTS_VOICE_ID = Deno.env.get("TTS_VOICE_ID") || "astra";
+    const TTS_VOICE_ID = Deno.env.get("TTS_VOICE_ID") || "";
 
     // Parse optional body
     let prompt =
