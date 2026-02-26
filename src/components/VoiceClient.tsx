@@ -184,16 +184,6 @@ export function VoiceClient() {
     if (!chatMessage.trim() || !isConnected) return;
     const text = chatMessage.trim();
     setChatMessage("");
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `user-text-${Date.now()}`,
-        role: "user",
-        text,
-        timestamp: Date.now(),
-        isFinal: true,
-      },
-    ]);
     await sendTextMessage(text);
   };
 

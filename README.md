@@ -276,7 +276,7 @@ await rtm.publish(agentRtmUid, payload, {
 await rtm.logout();
 ```
 
-**RTM rules:** Target is `agentRtmUid` (e.g. `"100-{channel}"`), NOT the channel name. Message must be JSON `{ "message": "text", "priority": "APPEND" }` with options `{ customType: "user.transcription", channelType: "USER" }`. Show user message optimistically before sending. Never `console.log()` the RTM client object (circular refs crash).
+**RTM rules:** Target is `agentRtmUid` (e.g. `"100-{channel}"`), NOT the channel name. Message must be JSON `{ "message": "text", "priority": "APPEND" }` with options `{ customType: "user.transcription", channelType: "USER" }`. Do NOT add the message to the chat UI locally — the agent echoes it back as a `user.transcription` via the RTC stream-message transcript listener, so it will appear automatically. Never `console.log()` the RTM client object (circular refs crash).
 
 ### Frontend: UI Layout
 
