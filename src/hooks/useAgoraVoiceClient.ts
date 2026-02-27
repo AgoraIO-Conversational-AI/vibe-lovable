@@ -189,10 +189,8 @@ export function useAgoraVoiceClient() {
         agentRtmUidRef.current = config.agentRtmUid;
         try {
           const AgoraRTM = await import("agora-rtm");
-          const rtm = new AgoraRTM.default.RTM(config.appId, String(config.uid), {
-            token: config.token ?? undefined,
-          } as any);
-          await rtm.login();
+          const rtm = new AgoraRTM.default.RTM(config.appId, String(config.uid));
+          await rtm.login({ token: config.token ?? undefined });
           rtmClientRef.current = rtm;
         } catch (err) {
           console.warn("RTM connection failed (text messaging unavailable):", err);

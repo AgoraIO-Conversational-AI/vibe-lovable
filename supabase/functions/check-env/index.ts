@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
 
   const requiredVars = [
     "APP_ID",
-    "AGENT_AUTH_HEADER",
+    "APP_CERTIFICATE",
     "LLM_API_KEY",
     "TTS_VENDOR",
     "TTS_KEY",
@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
   ];
 
   const optionalVars: string[] = [
-    "APP_CERTIFICATE",
+    "AGENT_AUTH_HEADER",
     "LLM_URL",
     "LLM_MODEL",
   ];

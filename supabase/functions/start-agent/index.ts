@@ -69,7 +69,8 @@ async function buildToken(
   channelName: string,
   uid: string,
   appId: string,
-  appCertificate: string
+  appCertificate: string,
+  rtmUid?: string
 ): Promise<string> {
   const issueTs = Math.floor(Date.now() / 1000);
   const expire = 86400;
@@ -83,12 +84,14 @@ async function buildToken(
   const rtcPrivileges: Record<number, number> = {
     1: expire, // joinChannel
     2: expire, // publishAudioStream
+    3: expire, // publishVideoStream
+    4: expire, // publishDataStream
   };
   const rtcPacked = concat(packUint16(1), packMapUint32(rtcPrivileges), packString(channelName), packString(uid));
 
-  // Pack RTM service (type=2): type + privileges + userId
+  // Pack RTM service (type=2): type + privileges + userId (uses rtmUid if provided)
   const rtmPrivileges: Record<number, number> = { 1: expire }; // login
-  const rtmPacked = concat(packUint16(2), packMapUint32(rtmPrivileges), packString(uid));
+  const rtmPacked = concat(packUint16(2), packMapUint32(rtmPrivileges), packString(rtmUid || uid));
 
   // Signing info
   const signingInfo = concat(
@@ -108,6 +111,20 @@ async function buildToken(
   const content = concat(packUint16(signature.length), signature, signingInfo);
   const compressed = await deflateAsync(content);
   return "007" + toBase64(compressed);
+}
+
+// --- Auth header ---
+
+async function buildAuthHeader(
+  appId: string,
+  appCertificate: string,
+  agentAuthHeader: string
+): Promise<string> {
+  // If AGENT_AUTH_HEADER is set, use it directly (Basic auth)
+  if (agentAuthHeader) return agentAuthHeader;
+  // Otherwise generate a v007 token and return "agora token=<token>"
+  const token = await buildToken("", "", appId, appCertificate);
+  return `agora token=${token}`;
 }
 
 // --- Edge function ---
@@ -218,6 +235,7 @@ Deno.serve(async (req) => {
     }
 
     const channel = generateChannel();
+    const agentRtmUid = `${AGENT_UID}-${channel}`;
 
     // Token generation: real tokens if certificate exists, APP_ID otherwise
     let userToken = "";
@@ -226,10 +244,8 @@ Deno.serve(async (req) => {
 
     if (hasCertificate) {
       userToken = await buildToken(channel, USER_UID, APP_ID, APP_CERTIFICATE);
-      agentToken = await buildToken(channel, AGENT_UID, APP_ID, APP_CERTIFICATE);
+      agentToken = await buildToken(channel, AGENT_UID, APP_ID, APP_CERTIFICATE, agentRtmUid);
     }
-
-    const agentRtmUid = `${AGENT_UID}-${channel}`;
     const ttsConfig = buildTtsConfig(TTS_VENDOR, TTS_KEY, TTS_VOICE_ID);
 
     const payload = {
@@ -246,7 +262,7 @@ Deno.serve(async (req) => {
           enable_bhvs: true,
           enable_rtm: true,
           enable_aivad: true,
-          enable_sal: false,
+          enable_sal: true,
         },
         llm: {
           url: LLM_URL,
@@ -278,7 +294,7 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: AGENT_AUTH_HEADER,
+          Authorization: await buildAuthHeader(APP_ID, APP_CERTIFICATE, AGENT_AUTH_HEADER),
         },
         body: JSON.stringify(payload),
       }
