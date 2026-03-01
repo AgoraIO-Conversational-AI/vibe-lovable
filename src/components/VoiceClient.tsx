@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { AgoraLogo } from "./AgoraLogo";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface EnvStatus {
   configured: Record<string, boolean>;
@@ -86,7 +88,7 @@ export function VoiceClient() {
     conversationEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Transcript handler — groups messages by turn_id, updates on partial, finalizes on final
+  // Transcript handler
   const handleTranscript = useCallback(
     (msg: Record<string, unknown>) => {
       const objectType = msg.object as string;
@@ -143,8 +145,6 @@ export function VoiceClient() {
 
       setAgentId(data.agentId);
       setChannelName(data.channel);
-
-      // Register transcript callback before joining so we catch the greeting
       setTranscriptCallback(handleTranscript);
 
       await joinChannel({
@@ -213,7 +213,7 @@ export function VoiceClient() {
             <ul className="space-y-1 mb-4">
               {envStatus.missing.map((v) => (
                 <li key={v} className="text-sm font-mono text-destructive">
-                  • {v}
+                  {v}
                 </li>
               ))}
             </ul>
@@ -227,8 +227,28 @@ export function VoiceClient() {
   if (!isConnected) {
     return (
       <div className="flex min-h-screen flex-col bg-background">
+        {/* Header */}
+        <header className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <AgoraLogo size={28} />
+            <div>
+              <h1 className="text-sm font-semibold leading-tight">Voice AI Agent</h1>
+              <p className="text-xs text-muted-foreground">Powered by Agora</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="rounded-full p-2 hover:bg-accent transition-colors"
+            >
+              <Settings className="h-5 w-5" />
+            </button>
+          </div>
+        </header>
+
         <div className="flex flex-1 items-center justify-center p-4">
-          <div className="w-full max-w-md space-y-6">
+          <div className="w-full max-w-md space-y-6 flex flex-col items-center">
             {/* Agent orb */}
             <div className="flex flex-col items-center gap-4">
               <div className="relative">
@@ -238,9 +258,6 @@ export function VoiceClient() {
                   </div>
                 </div>
               </div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                Voice AI Agent
-              </h1>
               <p className="text-sm text-muted-foreground text-center">
                 Talk to an AI assistant in real-time
               </p>
@@ -250,47 +267,40 @@ export function VoiceClient() {
             <Button
               onClick={handleConnect}
               disabled={isLoading}
-              className="w-full h-12 text-base gap-2"
+              className="w-64 mx-auto h-12 rounded-lg text-base gap-2"
               size="lg"
             >
               <Phone className="h-5 w-5" />
-              {isLoading ? "Connecting..." : "Connect"}
+              {isLoading ? "Connecting..." : "Start Call"}
             </Button>
 
-            {/* Settings toggle */}
-            <button
-              onClick={() => setShowSettings(!showSettings)}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mx-auto"
-            >
-              <Settings className="h-4 w-4" />
-              {showSettings ? "Hide settings" : "Customize prompt & greeting"}
-            </button>
-
             {showSettings && (
-              <div className="space-y-3 rounded-lg border p-4">
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">
-                    System Prompt
-                  </label>
-                  <Textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="You are a friendly voice assistant..."
-                    className="resize-none"
-                    rows={3}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">
-                    Greeting Message
-                  </label>
-                  <Input
-                    value={greeting}
-                    onChange={(e) => setGreeting(e.target.value)}
-                    placeholder="Hi there! How can I help you today?"
-                  />
-                </div>
-              </div>
+              <Card className="border w-full">
+                <CardContent className="pt-4 space-y-3">
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">
+                      System Prompt
+                    </label>
+                    <Textarea
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      placeholder="You are a friendly voice assistant..."
+                      className="resize-none"
+                      rows={3}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">
+                      Greeting Message
+                    </label>
+                    <Input
+                      value={greeting}
+                      onChange={(e) => setGreeting(e.target.value)}
+                      placeholder="Hi there! How can I help you today?"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
         </div>
@@ -302,16 +312,9 @@ export function VoiceClient() {
   return (
     <div className="flex h-screen flex-col bg-background overflow-hidden">
       {/* Header */}
-      <header className="border-b px-4 py-3 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "h-2.5 w-2.5 rounded-full",
-              agentState === "talking"
-                ? "bg-success animate-pulse"
-                : "bg-primary"
-            )}
-          />
+      <header className="px-4 py-3 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-2.5">
+          <AgoraLogo size={24} />
           <span className="text-sm font-medium">
             {channelName && (
               <span className="text-muted-foreground font-mono text-xs mr-2">
@@ -321,15 +324,16 @@ export function VoiceClient() {
             {formatTime(connectionTime)}
           </span>
         </div>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={handleDisconnect}
-          className="gap-1.5"
-        >
-          <PhoneOff className="h-4 w-4" />
-          End
-        </Button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <button
+            onClick={handleDisconnect}
+            className="rounded-full bg-destructive px-5 py-2.5 text-destructive-foreground hover:bg-destructive/90 transition-colors flex items-center gap-2 text-sm font-medium"
+          >
+            <PhoneOff className="h-4 w-4" />
+            End
+          </button>
+        </div>
       </header>
 
       {/* Main content */}
@@ -366,9 +370,7 @@ export function VoiceClient() {
                 </div>
               </div>
               {agentState === "talking" && (
-                <>
-                  <div className="absolute inset-0 rounded-full bg-primary/10 animate-ping" />
-                </>
+                <div className="absolute inset-0 rounded-full bg-primary/10 animate-ping" />
               )}
             </div>
           </div>
@@ -382,20 +384,23 @@ export function VoiceClient() {
                 : agentState}
           </div>
 
-          {/* Mic controls */}
-          <div className="flex gap-3">
-            <Button
+          {/* Mic toggle - round */}
+          <div className="flex justify-center">
+            <button
               onClick={toggleMute}
-              variant={isMuted ? "destructive" : "secondary"}
-              className="flex-1 h-12 gap-2"
+              className={cn(
+                "h-14 w-14 rounded-full flex items-center justify-center transition-colors",
+                isMuted
+                  ? "border-2 border-primary text-primary bg-transparent"
+                  : "bg-primary text-primary-foreground"
+              )}
             >
               {isMuted ? (
-                <MicOff className="h-5 w-5" />
+                <MicOff className="h-6 w-6" />
               ) : (
-                <Mic className="h-5 w-5" />
+                <Mic className="h-6 w-6" />
               )}
-              {isMuted ? "Unmute" : "Mute"}
-            </Button>
+            </button>
           </div>
 
           {/* Audio waveform */}
@@ -473,28 +478,32 @@ export function VoiceClient() {
               placeholder="Type a message..."
               className="flex-1"
             />
-            <Button
+            <button
               onClick={handleSendMessage}
               disabled={!chatMessage.trim()}
-              size="icon"
+              className="rounded-md bg-primary p-2 text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               <Send className="h-4 w-4" />
-            </Button>
+            </button>
           </div>
 
           {/* Mobile: bottom controls */}
-          <div className="flex md:hidden gap-3 p-3 border-t">
-            <Button
+          <div className="flex md:hidden justify-center p-3 border-t">
+            <button
               onClick={toggleMute}
-              variant={isMuted ? "destructive" : "secondary"}
-              className="flex-1 h-12"
+              className={cn(
+                "h-14 w-14 rounded-full flex items-center justify-center transition-colors",
+                isMuted
+                  ? "border-2 border-primary text-primary bg-transparent"
+                  : "bg-primary text-primary-foreground"
+              )}
             >
               {isMuted ? (
-                <MicOff className="h-5 w-5" />
+                <MicOff className="h-6 w-6" />
               ) : (
-                <Mic className="h-5 w-5" />
+                <Mic className="h-6 w-6" />
               )}
-            </Button>
+            </button>
           </div>
         </div>
       </div>
